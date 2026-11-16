@@ -1,0 +1,1535 @@
+```html
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>ComiZip - 만화책 ZIP/CBZ 뷰어 웹앱</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- JSZip Library for ZIP/CBZ streaming & extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Inter & Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans KR"', 'Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        body {
+            background-color: #090a0f;
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
+        }
+        /* Range Slider Styling */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            background: #374151;
+            height: 6px;
+            border-radius: 999px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            margin-top: -5px;
+            background-color: #6366f1;
+            height: 16px;
+            width: 16px;
+            border-radius: 999px;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.8);
+            transition: transform 0.15s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        .viewer-image {
+            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- ==================== 1. LIBRARY / HOME VIEW ==================== -->
+    <div id="libraryView" class="flex-1 flex flex-col max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
+        <!-- Top App Bar -->
+        <header class="flex items-center justify-between pb-6 border-b border-gray-800/80">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="book-open" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold tracking-tight text-white">ComiZip</h1>
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Android WebApp</span>
+                    </div>
+                    <p class="text-xs text-gray-400">대용량 ZIP · CBZ 스트리밍 만화 뷰어</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button id="btnAndroidGuide" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-800/90 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition">
+                    <i data-lucide="smartphone" class="w-4 h-4 text-emerald-400"></i>
+                    <span class="hidden sm:inline">안드로이드 APK 변환 가이드</span>
+                    <span class="sm:hidden">APK 가이드</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- File Dropzone & Quick Actions -->
+        <section class="mt-6">
+            <div id="dropZone" class="relative group rounded-3xl border-2 border-dashed border-gray-700 hover:border-indigo-500 bg-gray-900/60 hover:bg-gray-900/90 transition-all duration-200 p-6 sm:p-10 text-center cursor-pointer overflow-hidden">
+                <input type="file" id="fileInput" accept=".zip,.cbz,application/zip,application/x-cbz" class="hidden" />
+                
+                <div class="max-w-md mx-auto flex flex-col items-center">
+                    <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4 group-hover:scale-105 group-hover:bg-indigo-500/20 transition">
+                        <i data-lucide="folder-archive" class="w-8 h-8 text-indigo-400"></i>
+                    </div>
+                    <h2 class="text-lg sm:text-xl font-bold text-white mb-1">만화책 압축파일(.zip, .cbz) 열기</h2>
+                    <p class="text-xs sm:text-sm text-gray-400 mb-6 leading-relaxed">
+                        클릭하여 기기에서 파일을 선택하거나 이곳에 드래그 앤 드롭하세요.<br/>
+                        <span class="text-indigo-400 font-medium">지연 로딩(Lazy-loading)</span>으로 수백 MB 파일도 끊김 없이 열립니다.
+                    </p>
+
+                    <div class="flex flex-wrap items-center justify-center gap-3 w-full">
+                        <button type="button" id="btnPickFile" class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 transition">
+                            <i data-lucide="upload" class="w-4 h-4"></i>
+                            내 기기에서 ZIP 열기
+                        </button>
+                        <button type="button" id="btnLoadSample" class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 active:scale-95 text-sm font-medium text-gray-200 border border-gray-700 transition">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i>
+                            샘플 만화 ZIP 생성·열기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Technical Features Pill Bar -->
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+            <div class="p-3.5 rounded-2xl bg-gray-900/70 border border-gray-800/80 flex items-center gap-3">
+                <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+                    <i data-lucide="cpu" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-white">메모리 최적화</div>
+                    <div class="text-[11px] text-gray-400">앞뒤 2P 캐싱 & 자동해제</div>
+                </div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-gray-900/70 border border-gray-800/80 flex items-center gap-3">
+                <div class="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+                    <i data-lucide="arrow-down-1-0" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-white">자연 정렬 & 인코딩</div>
+                    <div class="text-[11px] text-gray-400">1, 2, 10순 / 한글 깨짐 방지</div>
+                </div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-gray-900/70 border border-gray-800/80 flex items-center gap-3">
+                <div class="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+                    <i data-lucide="columns" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-white">단면·양면·웹툰</div>
+                    <div class="text-[11px] text-gray-400">일본만화(우→좌) 완벽 지원</div>
+                </div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-gray-900/70 border border-gray-800/80 flex items-center gap-3">
+                <div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                    <i data-lucide="bookmark-check" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-white">IndexedDB 서재</div>
+                    <div class="text-[11px] text-gray-400">마지막 읽은 페이지 기억</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recent Books / Reading History (IndexedDB) -->
+        <section class="mt-8 flex-1 flex flex-col">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="history" class="w-5 h-5 text-indigo-400"></i>
+                    <h3 class="text-base font-bold text-white">최근 읽은 만화 기록</h3>
+                    <span id="recentCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">0</span>
+                </div>
+                <button id="btnClearHistory" class="text-xs text-gray-400 hover:text-rose-400 flex items-center gap-1 transition hidden">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    기록 비우기
+                </button>
+            </div>
+
+            <div id="recentBooksGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Populated dynamically via IndexedDB -->
+            </div>
+
+            <div id="emptyHistoryState" class="flex-1 flex flex-col items-center justify-center py-12 px-4 rounded-2xl border border-gray-800/60 bg-gray-900/30 text-center">
+                <i data-lucide="book-dashed" class="w-10 h-10 text-gray-600 mb-2"></i>
+                <p class="text-sm text-gray-400 font-medium">아직 열람한 만화책이 없습니다.</p>
+                <p class="text-xs text-gray-500 mt-1">ZIP 파일을 열면 표지 썸네일과 마지막 읽은 페이지가 이곳에 자동 저장됩니다.</p>
+            </div>
+        </section>
+    </div>
+
+    <!-- ==================== 2. COMIC VIEWER VIEW ==================== -->
+    <div id="viewerView" class="fixed inset-0 bg-black z-40 hidden flex-col select-none overflow-hidden">
+        
+        <!-- Brightness & Eye Care Filter Overlay -->
+        <div id="screenFilterOverlay" class="pointer-events-none fixed inset-0 z-30 transition-all duration-150"></div>
+
+        <!-- TOP HUD BAR -->
+        <header id="viewerTopBar" class="fixed top-0 inset-x-0 z-40 bg-gradient-to-b from-black/90 via-black/75 to-transparent pt-3 pb-6 px-4 transition-transform duration-200">
+            <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button id="btnBackToLibrary" class="p-2.5 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-white border border-gray-700/70 active:scale-95 transition" title="서재로 돌아가기">
+                        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                    </button>
+                    <div class="min-w-0">
+                        <h2 id="comicTitle" class="text-sm sm:text-base font-bold text-white truncate">만화 제목.zip</h2>
+                        <div class="flex items-center gap-2 text-[11px] text-gray-300">
+                            <span id="currentFileName" class="truncate max-w-[180px] sm:max-w-xs">001.jpg</span>
+                            <span>•</span>
+                            <span id="memoryStatusBadge" class="text-emerald-400 font-medium">캐시 1P</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Mode Toggles -->
+                <div class="flex items-center gap-1.5">
+                    <!-- Reading Direction Toggle (LTR / RTL) -->
+                    <button id="btnToggleDirection" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-xs font-semibold text-white border border-gray-700/70 transition" title="읽기 방향 전환">
+                        <i data-lucide="arrow-left-right" class="w-4 h-4 text-indigo-400"></i>
+                        <span id="directionLabel">좌→우 (일반)</span>
+                    </button>
+
+                    <!-- View Mode Toggle (Single / Double / Webtoon) -->
+                    <button id="btnCycleViewMode" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-xs font-semibold text-white border border-gray-700/70 transition" title="보기 모드 변경">
+                        <i data-lucide="book-open" class="w-4 h-4 text-amber-400"></i>
+                        <span id="viewModeLabel">단면</span>
+                    </button>
+
+                    <!-- Settings Drawer Button -->
+                    <button id="btnToggleSettings" class="p-2.5 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-white border border-gray-700/70 transition" title="뷰어 상세 설정">
+                        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                    </button>
+
+                    <!-- Fullscreen Toggle -->
+                    <button id="btnFullscreen" class="p-2.5 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-white border border-gray-700/70 transition hidden sm:flex" title="전체화면">
+                        <i data-lucide="maximize" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN STAGE (Single / Double Page Mode & Touch Zones) -->
+        <main id="stageContainer" class="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-black">
+            
+            <!-- Paged Container (Single / Double Spread) -->
+            <div id="pagedStage" class="w-full h-full flex items-center justify-center overflow-hidden">
+                <div id="zoomWrapper" class="flex items-center justify-center w-full h-full transition-transform duration-150 ease-out origin-center">
+                    <img id="primaryPageImg" class="viewer-image max-h-full max-w-full object-contain select-none" alt="만화 페이지" draggable="false" />
+                    <img id="secondaryPageImg" class="viewer-image max-h-full max-w-full object-contain select-none hidden" alt="만화 보조 페이지" draggable="false" />
+                </div>
+            </div>
+
+            <!-- Webtoon Vertical Scroll Container -->
+            <div id="webtoonStage" class="w-full h-full overflow-y-auto hidden flex-col items-center bg-black scroll-smooth">
+                <!-- Populated dynamically with IntersectionObserver lazy-loading -->
+            </div>
+
+            <!-- Touch Guide Visual Overlay (Shown briefly or via toggle) -->
+            <div id="touchGuideOverlay" class="pointer-events-none absolute inset-0 z-20 grid grid-cols-3 opacity-0 transition-opacity duration-300">
+                <div class="border-r border-dashed border-white/30 bg-indigo-500/10 flex flex-col items-center justify-center">
+                    <span id="leftZoneText" class="px-3 py-1.5 rounded-full bg-black/70 text-xs font-bold text-white">이전 페이지</span>
+                </div>
+                <div class="border-r border-dashed border-white/30 bg-white/5 flex flex-col items-center justify-center">
+                    <span class="px-3 py-1.5 rounded-full bg-black/70 text-xs font-bold text-amber-300">메뉴 표시/숨김 (더블탭 확대)</span>
+                </div>
+                <div class="bg-indigo-500/10 flex flex-col items-center justify-center">
+                    <span id="rightZoneText" class="px-3 py-1.5 rounded-full bg-black/70 text-xs font-bold text-white">다음 페이지</span>
+                </div>
+            </div>
+
+            <!-- Page Loading Spinner -->
+            <div id="pageLoadingSpinner" class="pointer-events-none absolute inset-0 flex items-center justify-center z-20 hidden">
+                <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-700 flex items-center gap-3 shadow-2xl">
+                    <div class="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-xs font-medium text-gray-200">압축 스트리밍 해제 중...</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- SETTINGS POPOVER PANEL -->
+        <div id="settingsPopover" class="fixed right-4 top-16 z-50 w-80 rounded-2xl bg-gray-900/95 backdrop-blur-md border border-gray-700/80 shadow-2xl p-4 hidden">
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-gray-800">
+                <span class="text-sm font-bold text-white flex items-center gap-1.5">
+                    <i data-lucide="settings-2" class="w-4 h-4 text-indigo-400"></i>
+                    뷰어 상세 설정
+                </span>
+                <button id="btnCloseSettings" class="text-gray-400 hover:text-white">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- View Mode -->
+                <div>
+                    <label class="block text-gray-400 mb-1.5 font-medium">열람 레이아웃</label>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button data-mode="single" class="mode-btn py-2 px-2 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-300 font-semibold">단면 보기</button>
+                        <button data-mode="double" class="mode-btn py-2 px-2 rounded-xl border border-gray-700 bg-gray-800/70 text-gray-300 hover:bg-gray-800">양면 보기</button>
+                        <button data-mode="webtoon" class="mode-btn py-2 px-2 rounded-xl border border-gray-700 bg-gray-800/70 text-gray-300 hover:bg-gray-800">웹툰 스크롤</button>
+                    </div>
+                </div>
+
+                <!-- Image Fit Mode -->
+                <div>
+                    <label class="block text-gray-400 mb-1.5 font-medium">화면 맞춤 방식</label>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button data-fit="contain" class="fit-btn py-2 px-2 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-300 font-semibold">화면 맞춤</button>
+                        <button data-fit="width" class="fit-btn py-2 px-2 rounded-xl border border-gray-700 bg-gray-800/70 text-gray-300 hover:bg-gray-800">가로 맞춤</button>
+                        <button data-fit="height" class="fit-btn py-2 px-2 rounded-xl border border-gray-700 bg-gray-800/70 text-gray-300 hover:bg-gray-800">세로 맞춤</button>
+                    </div>
+                </div>
+
+                <!-- Cover Page Offset (For Double Page Spread) -->
+                <div class="flex items-center justify-between pt-1">
+                    <div>
+                        <div class="text-gray-200 font-medium">표지(1P) 단독 표시</div>
+                        <div class="text-[11px] text-gray-400">양면 보기 시 첫 표지를 한 장만 표시</div>
+                    </div>
+                    <input type="checkbox" id="chkCoverSingle" checked class="w-4 h-4 accent-indigo-500 rounded cursor-pointer" />
+                </div>
+
+                <!-- Brightness Control -->
+                <div>
+                    <div class="flex justify-between text-gray-300 mb-1">
+                        <span>화면 밝기</span>
+                        <span id="brightnessVal">100%</span>
+                    </div>
+                    <input type="range" id="brightnessSlider" min="35" max="100" value="100" class="w-full" />
+                </div>
+
+                <!-- Warmth / Sepia Eye Protection -->
+                <div>
+                    <div class="flex justify-between text-gray-300 mb-1">
+                        <span>눈 보호 필터 (세피아)</span>
+                        <span id="sepiaVal">0%</span>
+                    </div>
+                    <input type="range" id="sepiaSlider" min="0" max="60" value="0" class="w-full" />
+                </div>
+
+                <!-- Show Touch Zones -->
+                <button id="btnShowTouchGuide" class="w-full py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium border border-gray-700 transition">
+                    터치 영역 가이드 보기
+                </button>
+            </div>
+        </div>
+
+        <!-- BOTTOM HUD BAR (Page Slider & Thumbnail Strip) -->
+        <footer id="viewerBottomBar" class="fixed bottom-0 inset-x-0 z-40 bg-gradient-to-t from-black/95 via-black/85 to-transparent pt-6 pb-4 px-4 transition-transform duration-200">
+            <div class="max-w-4xl mx-auto flex flex-col gap-3">
+                
+                <!-- Thumbnail Preview Strip (Collapsible) -->
+                <div id="thumbnailDrawer" class="hidden overflow-x-auto py-2 px-1 gap-2 bg-gray-900/90 rounded-2xl border border-gray-800">
+                    <!-- Populated on demand -->
+                </div>
+
+                <!-- Slider Controls Row -->
+                <div class="flex items-center gap-3">
+                    <button id="btnToggleThumbnails" class="p-2 rounded-xl bg-gray-900/90 hover:bg-gray-800 text-gray-300 border border-gray-700/80 transition" title="페이지 목록 보기">
+                        <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                    </button>
+
+                    <!-- Slider wrapper (Flips direction in RTL Japanese Manga mode!) -->
+                    <div class="flex-1 flex items-center gap-3">
+                        <input type="range" id="pageSlider" min="0" max="1" value="0" class="w-full" />
+                    </div>
+
+                    <div class="min-w-[76px] text-right font-mono text-xs sm:text-sm font-bold text-white bg-gray-900/90 px-3 py-1.5 rounded-xl border border-gray-700/80">
+                        <span id="currentPageNum" class="text-indigo-400">1</span>
+                        <span class="text-gray-500">/</span>
+                        <span id="totalPageNum">1</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- ==================== 3. ANDROID CAPACITOR GUIDE MODAL ==================== -->
+    <div id="androidGuideModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="p-5 border-b border-gray-800 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+                        <i data-lucide="smartphone" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">이 웹앱을 안드로이드 APK로 빌드하는 방법</h3>
+                        <p class="text-xs text-gray-400">Capacitor를 이용해 스토어 출시 및 파일 탐색기 ZIP 연결하기</p>
+                    </div>
+                </div>
+                <button id="btnCloseAndroidModal" class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-5 overflow-y-auto space-y-4 text-xs sm:text-sm text-gray-300 leading-relaxed">
+                <div class="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-xs">
+                    현재 보고 계신 웹앱은 모바일 터치 제스처, 메모리 해제, IndexedDB가 모두 구현되어 있어 <strong>Capacitor</strong>로 감싸기만 하면 즉시 네이티브 안드로이드 앱(APK)으로 동작합니다.
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-white mb-1">1단계: Capacitor 초기화 및 안드로이드 플랫폼 추가</h4>
+                    <pre class="p-3 rounded-xl bg-black/80 border border-gray-800 text-emerald-400 font-mono text-xs overflow-x-auto select-all">npm init -y
+npm install @capacitor/core @capacitor/cli @capacitor/android
+npx cap init ComiZip com.example.comizip --web-dir .
+npx cap add android</pre>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-white mb-1">2단계: 안드로이드 '내 파일'에서 .zip / .cbz 바로 열기 (Intent Filter)</h4>
+                    <p class="text-xs text-gray-400 mb-2"><code>android/app/src/main/AndroidManifest.xml</code>의 <code>&lt;activity&gt;</code> 태그 내부에 아래 설정을 추가하면, 스마트폰 파일 관리자에서 만화 ZIP을 터치했을 때 이 앱이 연결 프로그램으로 뜹니다.</p>
+                    <pre class="p-3 rounded-xl bg-black/80 border border-gray-800 text-amber-300 font-mono text-xs overflow-x-auto select-all">&lt;intent-filter&gt;
+    &lt;action android:name="android.intent.action.VIEW" /&gt;
+    &lt;category android:name="android.intent.category.DEFAULT" /&gt;
+    &lt;category android:name="android.intent.category.BROWSABLE" /&gt;
+    &lt;data android:scheme="content" /&gt;
+    &lt;data android:scheme="file" /&gt;
+    &lt;data android:mimeType="application/zip" /&gt;
+    &lt;data android:mimeType="application/x-cbz" /&gt;
+&lt;/intent-filter&gt;</pre>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-white mb-1">3단계: Android Studio에서 APK 추출</h4>
+                    <pre class="p-3 rounded-xl bg-black/80 border border-gray-800 text-indigo-300 font-mono text-xs overflow-x-auto select-all">npx cap copy
+npx cap open android</pre>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-800 bg-gray-900/50 flex justify-end">
+                <button id="btnConfirmAndroidModal" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 4. TOAST NOTIFICATION ==================== -->
+    <div id="toastContainer" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2"></div>
+
+    <!-- ==================== APPLICATION LOGIC ==================== -->
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        /**
+         * ============================================================================
+         * 1. NATURAL SORT & EUC-KR (CP949) FILENAME DECODER
+         * ============================================================================
+         * Handles:
+         * - Sorting "1.jpg", "2.jpg", "10.jpg" in true numerical order
+         * - Filtering out macOS metadata (__MACOSX, .DS_Store) and non-images
+         * - Fallback decoding for legacy Korean/Japanese ZIP files
+         */
+        const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif|svg)$/i;
+
+        function isValidComicImage(filename) {
+            if (!filename) return false;
+            if (filename.includes('__MACOSX') || filename.includes('.DS_Store') || filename.endsWith('/')) {
+                return false;
+            }
+            const base = filename.split('/').pop();
+            if (base.startsWith('.')) return false;
+            return IMAGE_EXTENSIONS.test(base);
+        }
+
+        function decodeLegacyZipFilename(bytes) {
+            // Try strict UTF-8 first; if broken, fallback to EUC-KR (CP949)
+            try {
+                const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+                return utf8Decoder.decode(bytes);
+            } catch (e) {
+                try {
+                    const eucKrDecoder = new TextDecoder('euc-kr');
+                    return eucKrDecoder.decode(bytes);
+                } catch (err) {
+                    return new TextDecoder().decode(bytes);
+                }
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 2. INDEXED-DB STORAGE SERVICE (Bookmarks & Recent Comics)
+         * ============================================================================
+         */
+        class ComicStorageService {
+            constructor() {
+                this.dbName = 'ComiZipDB';
+                this.storeName = 'recentBooks';
+                this.db = null;
+            }
+
+            async init() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(this.dbName, 1);
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(this.storeName)) {
+                            db.createObjectStore(this.storeName, { keyPath: 'bookKey' });
+                        }
+                    };
+                    req.onsuccess = (e) => {
+                        this.db = e.target.result;
+                        resolve();
+                    };
+                    req.onerror = (e) => reject(e);
+                });
+            }
+
+            getBookKey(file) {
+                return `${file.name}_${file.size}`;
+            }
+
+            async saveProgress(bookMeta) {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.storeName, 'readwrite');
+                    const store = tx.objectStore(this.storeName);
+                    store.put({
+                        ...bookMeta,
+                        updatedAt: Date.now()
+                    });
+                    tx.oncomplete = () => resolve();
+                });
+            }
+
+            async getBookProgress(bookKey) {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.storeName, 'readonly');
+                    const store = tx.objectStore(this.storeName);
+                    const req = store.get(bookKey);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            }
+
+            async getAllRecentBooks() {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.storeName, 'readonly');
+                    const store = tx.objectStore(this.storeName);
+                    const req = store.getAll();
+                    req.onsuccess = () => {
+                        const list = req.result || [];
+                        list.sort((a, b) => b.updatedAt - a.updatedAt);
+                        resolve(list);
+                    };
+                    req.onerror = () => resolve([]);
+                });
+            }
+
+            async clearAll() {
+                if (!this.db) await this.init();
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction(this.storeName, 'readwrite');
+                    tx.objectStore(this.storeName).clear();
+                    tx.oncomplete = () => resolve();
+                });
+            }
+        }
+
+        const storageService = new ComicStorageService();
+
+        /**
+         * ============================================================================
+         * 3. ZIP STREAMING & LRU MEMORY MANAGER
+         * ============================================================================
+         * Extracts only the currently needed pages into Blob ObjectURLs and
+         * revokes distant pages automatically to prevent Android WebView OOM crashes.
+         */
+        class ZipComicEngine {
+            constructor() {
+                this.zip = null;
+                this.entries = []; // Sorted array of { name, entry }
+                this.urlCache = new Map(); // pageIndex -> ObjectURL
+                this.maxCacheRadius = 3; // Keep current +- 3 pages in memory
+                this.currentFile = null;
+                this.bookKey = null;
+            }
+
+            async loadFile(file) {
+                this.cleanupAllUrls();
+                this.currentFile = file;
+                this.bookKey = storageService.getBookKey(file);
+
+                // Load ZIP central directory using JSZip with custom filename decoder for EUC-KR support
+                this.zip = await JSZip.loadAsync(file, {
+                    decodeFileName: decodeLegacyZipFilename
+                });
+
+                const imageEntries = [];
+                this.zip.forEach((relativePath, zipEntry) => {
+                    if (!zipEntry.dir && isValidComicImage(zipEntry.name)) {
+                        imageEntries.push({
+                            name: zipEntry.name,
+                            shortName: zipEntry.name.split('/').pop(),
+                            entry: zipEntry
+                        });
+                    }
+                });
+
+                // Natural sort by full relative path so Volume/Chapter folders stay in order
+                imageEntries.sort((a, b) => naturalCollator.compare(a.name, b.name));
+                this.entries = imageEntries;
+
+                return this.entries.length;
+            }
+
+            getMimeType(filename) {
+                const ext = filename.split('.').pop().toLowerCase();
+                const map = {
+                    jpg: 'image/jpeg',
+                    jpeg: 'image/jpeg',
+                    png: 'image/png',
+                    webp: 'image/webp',
+                    gif: 'image/gif',
+                    bmp: 'image/bmp',
+                    avif: 'image/avif',
+                    svg: 'image/svg+xml'
+                };
+                return map[ext] || 'image/jpeg';
+            }
+
+            async getPageUrl(index) {
+                if (index < 0 || index >= this.entries.length) return null;
+                if (this.urlCache.has(index)) {
+                    return this.urlCache.get(index);
+                }
+
+                const item = this.entries[index];
+                const blobData = await item.entry.async('blob');
+                const typedBlob = new Blob([blobData], { type: this.getMimeType(item.name) });
+                const objectUrl = URL.createObjectURL(typedBlob);
+                this.urlCache.set(index, objectUrl);
+                return objectUrl;
+            }
+
+            // Generate small base64 thumbnail of Page 0 for IndexedDB cover card
+            async generateCoverThumbnailDataUrl() {
+                if (this.entries.length === 0) return null;
+                try {
+                    const url = await this.getPageUrl(0);
+                    const img = new Image();
+                    img.src = url;
+                    await new Promise((res, rej) => {
+                        img.onload = res;
+                        img.onerror = rej;
+                    });
+                    const canvas = document.createElement('canvas');
+                    const targetW = 180;
+                    const scale = targetW / img.width;
+                    canvas.width = targetW;
+                    canvas.height = Math.min(260, Math.round(img.height * scale));
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    return canvas.toDataURL('image/jpeg', 0.75);
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            // Preload adjacent pages and revoke pages outside [currentIndex - radius, currentIndex + radius]
+            async manageMemoryWindow(centerIndex, isWebtoonMode = false) {
+                const radius = isWebtoonMode ? 6 : this.maxCacheRadius;
+
+                // 1. Revoke distant ObjectURLs
+                for (const [cachedIdx, url] of this.urlCache.entries()) {
+                    if (Math.abs(cachedIdx - centerIndex) > radius) {
+                        URL.revokeObjectURL(url);
+                        this.urlCache.delete(cachedIdx);
+                    }
+                }
+
+                // 2. Preload nearby pages asynchronously
+                const preloadIndices = [];
+                for (let offset = 1; offset <= 2; offset++) {
+                    if (centerIndex + offset < this.entries.length) preloadIndices.push(centerIndex + offset);
+                    if (centerIndex - offset >= 0) preloadIndices.push(centerIndex - offset);
+                }
+
+                for (const idx of preloadIndices) {
+                    if (!this.urlCache.has(idx)) {
+                        this.getPageUrl(idx).catch(() => {});
+                    }
+                }
+
+                updateMemoryBadge(this.urlCache.size);
+            }
+
+            cleanupAllUrls() {
+                for (const url of this.urlCache.values()) {
+                    URL.revokeObjectURL(url);
+                }
+                this.urlCache.clear();
+                updateMemoryBadge(0);
+            }
+        }
+
+        const zipEngine = new ZipComicEngine();
+
+        /**
+         * ============================================================================
+         * 4. VIEWER STATE & UI CONTROLLER
+         * ============================================================================
+         */
+        const viewerState = {
+            currentIndex: 0,
+            totalPages: 0,
+            direction: 'ltr',     // 'ltr' (좌→우 한국/서양) | 'rtl' (우→좌 일본 만화)
+            viewMode: 'single',   // 'single' | 'double' | 'webtoon'
+            fitMode: 'contain',   // 'contain' | 'width' | 'height'
+            coverSingle: true,    // In double mode, show page 0 alone as cover
+            hudVisible: true,
+            zoomScale: 1,
+            brightness: 100,
+            sepia: 0,
+            coverDataUrl: null
+        };
+
+        // DOM Elements
+        const libraryView = document.getElementById('libraryView');
+        const viewerView = document.getElementById('viewerView');
+        const viewerTopBar = document.getElementById('viewerTopBar');
+        const viewerBottomBar = document.getElementById('viewerBottomBar');
+        const pagedStage = document.getElementById('pagedStage');
+        const webtoonStage = document.getElementById('webtoonStage');
+        const zoomWrapper = document.getElementById('zoomWrapper');
+        const primaryPageImg = document.getElementById('primaryPageImg');
+        const secondaryPageImg = document.getElementById('secondaryPageImg');
+        const pageSlider = document.getElementById('pageSlider');
+        const currentPageNum = document.getElementById('currentPageNum');
+        const totalPageNum = document.getElementById('totalPageNum');
+        const comicTitle = document.getElementById('comicTitle');
+        const currentFileName = document.getElementById('currentFileName');
+        const pageLoadingSpinner = document.getElementById('pageLoadingSpinner');
+        const settingsPopover = document.getElementById('settingsPopover');
+        const thumbnailDrawer = document.getElementById('thumbnailDrawer');
+
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'px-4 py-2.5 rounded-full bg-gray-900/95 text-white text-xs font-semibold border border-gray-700 shadow-xl flex items-center gap-2 transition-all duration-300';
+            toast.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-400"></span><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2200);
+        }
+
+        function updateMemoryBadge(count) {
+            const badge = document.getElementById('memoryStatusBadge');
+            if (badge) badge.textContent = `메모리 캐시 ${count}P`;
+        }
+
+        // Open a ZIP file and launch Viewer
+        async function openComicZipFile(file) {
+            try {
+                pageLoadingSpinner.classList.remove('hidden');
+                viewerView.classList.remove('hidden');
+                viewerView.classList.add('flex');
+                libraryView.classList.add('hidden');
+
+                comicTitle.textContent = file.name.replace(/\.(zip|cbz)$/i, '');
+                const count = await zipEngine.loadFile(file);
+
+                if (count === 0) {
+                    showToast('압축 파일 안에 표시할 이미지가 없습니다.');
+                    closeViewer();
+                    return;
+                }
+
+                viewerState.totalPages = count;
+                viewerState.zoomScale = 1;
+                applyZoomTransform();
+
+                // Check saved progress in IndexedDB
+                const saved = await storageService.getBookProgress(zipEngine.bookKey);
+                viewerState.currentIndex = (saved && saved.lastPage < count) ? saved.lastPage : 0;
+                if (saved && saved.direction) {
+                    viewerState.direction = saved.direction;
+                }
+
+                viewerState.coverDataUrl = await zipEngine.generateCoverThumbnailDataUrl();
+
+                pageSlider.max = count - 1;
+                pageSlider.value = viewerState.currentIndex;
+                totalPageNum.textContent = count;
+
+                syncDirectionUI();
+                syncViewModeUI();
+                buildThumbnailDrawer();
+
+                if (viewerState.viewMode === 'webtoon') {
+                    await renderWebtoonMode();
+                } else {
+                    await renderCurrentPage();
+                }
+
+                if (saved && saved.lastPage > 0) {
+                    showToast(`마지막 읽던 ${saved.lastPage + 1}페이지부터 이어봅니다.`);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('ZIP 파일을 여는 중 오류가 발생했습니다.');
+                closeViewer();
+            } finally {
+                pageLoadingSpinner.classList.add('hidden');
+            }
+        }
+
+        async function saveCurrentProgress() {
+            if (!zipEngine.currentFile || viewerState.totalPages === 0) return;
+            await storageService.saveProgress({
+                bookKey: zipEngine.bookKey,
+                title: zipEngine.currentFile.name,
+                fileSize: zipEngine.currentFile.size,
+                lastPage: viewerState.currentIndex,
+                totalPages: viewerState.totalPages,
+                direction: viewerState.direction,
+                coverDataUrl: viewerState.coverDataUrl
+            });
+        }
+
+        // Determine if current page in Double Mode should be displayed as a 2-page spread
+        function getSpreadPages(index) {
+            if (viewerState.viewMode !== 'double') {
+                return [index];
+            }
+            if (viewerState.coverSingle && index === 0) {
+                return [0];
+            }
+            if (index + 1 < viewerState.totalPages) {
+                return [index, index + 1];
+            }
+            return [index];
+        }
+
+        async function renderCurrentPage() {
+            if (viewerState.totalPages === 0) return;
+            pageLoadingSpinner.classList.remove('hidden');
+
+            try {
+                const pages = getSpreadPages(viewerState.currentIndex);
+                const primaryIdx = pages[0];
+                const secondaryIdx = pages.length > 1 ? pages[1] : null;
+
+                const url1 = await zipEngine.getPageUrl(primaryIdx);
+                primaryPageImg.src = url1 || '';
+
+                if (secondaryIdx !== null) {
+                    const url2 = await zipEngine.getPageUrl(secondaryIdx);
+                    secondaryPageImg.src = url2 || '';
+                    secondaryPageImg.classList.remove('hidden');
+                } else {
+                    secondaryPageImg.src = '';
+                    secondaryPageImg.classList.add('hidden');
+                }
+
+                // In Japanese Manga RTL mode, right page is primaryIdx and left page is secondaryIdx
+                if (viewerState.direction === 'rtl') {
+                    zoomWrapper.classList.add('flex-row-reverse');
+                } else {
+                    zoomWrapper.classList.remove('flex-row-reverse');
+                }
+
+                applyImageFitClasses();
+
+                // Update HUD info
+                const entryInfo = zipEngine.entries[primaryIdx];
+                currentFileName.textContent = entryInfo ? entryInfo.shortName : '';
+                currentPageNum.textContent = secondaryIdx !== null
+                    ? `${primaryIdx + 1}-${secondaryIdx + 1}`
+                    : `${primaryIdx + 1}`;
+                pageSlider.value = primaryIdx;
+
+                highlightActiveThumbnail(primaryIdx);
+                await zipEngine.manageMemoryWindow(primaryIdx, false);
+                await saveCurrentProgress();
+            } finally {
+                pageLoadingSpinner.classList.add('hidden');
+            }
+        }
+
+        function applyImageFitClasses() {
+            const imgs = [primaryPageImg, secondaryPageImg];
+            const isDouble = !secondaryPageImg.classList.contains('hidden');
+
+            imgs.forEach(img => {
+                img.className = 'viewer-image select-none';
+                if (isDouble) {
+                    img.classList.add('max-h-full', 'w-1/2', 'object-contain');
+                } else if (viewerState.fitMode === 'contain') {
+                    img.classList.add('max-h-full', 'max-w-full', 'object-contain');
+                } else if (viewerState.fitMode === 'width') {
+                    img.classList.add('w-full', 'h-auto', 'object-contain');
+                } else if (viewerState.fitMode === 'height') {
+                    img.classList.add('h-full', 'w-auto', 'object-contain');
+                }
+            });
+        }
+
+        // Webtoon Continuous Vertical Scroll Renderer with IntersectionObserver
+        let webtoonObserver = null;
+
+        async function renderWebtoonMode() {
+            webtoonStage.innerHTML = '';
+            if (webtoonObserver) webtoonObserver.disconnect();
+
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < viewerState.totalPages; i++) {
+                const slot = document.createElement('div');
+                slot.dataset.index = i;
+                slot.className = 'webtoon-slot w-full max-w-3xl min-h-[380px] flex items-center justify-center bg-gray-950 border-b border-gray-900/40';
+                slot.innerHTML = `<span class="text-xs text-gray-600 font-mono">Page ${i + 1}</span>`;
+                fragment.appendChild(slot);
+            }
+            webtoonStage.appendChild(fragment);
+
+            webtoonObserver = new IntersectionObserver(async (entries) => {
+                for (const entry of entries) {
+                    const idx = Number(entry.target.dataset.index);
+                    if (entry.isIntersecting) {
+                        viewerState.currentIndex = idx;
+                        currentPageNum.textContent = `${idx + 1}`;
+                        pageSlider.value = idx;
+                        const entryMeta = zipEngine.entries[idx];
+                        if (entryMeta) currentFileName.textContent = entryMeta.shortName;
+
+                        if (!entry.target.querySelector('img')) {
+                            const url = await zipEngine.getPageUrl(idx);
+                            if (url) {
+                                entry.target.innerHTML = '';
+                                const img = document.createElement('img');
+                                img.src = url;
+                                img.className = 'w-full h-auto block select-none';
+                                img.onload = () => {
+                                    entry.target.style.minHeight = 'auto';
+                                };
+                                entry.target.appendChild(img);
+                            }
+                        }
+                        zipEngine.manageMemoryWindow(idx, true);
+                        saveCurrentProgress();
+                    }
+                }
+            }, {
+                root: webtoonStage,
+                rootMargin: '600px 0px'
+            });
+
+            webtoonStage.querySelectorAll('.webtoon-slot').forEach(el => webtoonObserver.observe(el));
+
+            // Scroll to current index
+            const targetSlot = webtoonStage.querySelector(`[data-index="${viewerState.currentIndex}"]`);
+            if (targetSlot) targetSlot.scrollIntoView();
+        }
+
+        // Page Navigation
+        function stepForward() {
+            if (viewerState.viewMode === 'webtoon') {
+                webtoonStage.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' });
+                return;
+            }
+            const step = (viewerState.viewMode === 'double' && !(viewerState.coverSingle && viewerState.currentIndex === 0)) ? 2 : 1;
+            if (viewerState.currentIndex + step < viewerState.totalPages) {
+                viewerState.currentIndex += step;
+                viewerState.zoomScale = 1;
+                applyZoomTransform();
+                renderCurrentPage();
+            } else if (viewerState.currentIndex < viewerState.totalPages - 1) {
+                viewerState.currentIndex = viewerState.totalPages - 1;
+                renderCurrentPage();
+            } else {
+                showToast('마지막 페이지입니다.');
+            }
+        }
+
+        function stepBackward() {
+            if (viewerState.viewMode === 'webtoon') {
+                webtoonStage.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' });
+                return;
+            }
+            if (viewerState.currentIndex === 0) {
+                showToast('첫 페이지입니다.');
+                return;
+            }
+            let step = 1;
+            if (viewerState.viewMode === 'double') {
+                step = (viewerState.coverSingle && viewerState.currentIndex === 1) ? 1 : 2;
+            }
+            viewerState.currentIndex = Math.max(0, viewerState.currentIndex - step);
+            viewerState.zoomScale = 1;
+            applyZoomTransform();
+            renderCurrentPage();
+        }
+
+        function handleLeftSideTap() {
+            if (viewerState.direction === 'rtl') {
+                stepForward(); // 일본 만화(우→좌): 왼쪽 터치가 다음 페이지
+            } else {
+                stepBackward();
+            }
+        }
+
+        function handleRightSideTap() {
+            if (viewerState.direction === 'rtl') {
+                stepBackward(); // 일본 만화(우→좌): 오른쪽 터치가 이전 페이지
+            } else {
+                stepForward();
+            }
+        }
+
+        function toggleHud() {
+            viewerState.hudVisible = !viewerState.hudVisible;
+            if (viewerState.hudVisible) {
+                viewerTopBar.classList.remove('-translate-y-full');
+                viewerBottomBar.classList.remove('translate-y-full');
+            } else {
+                viewerTopBar.classList.add('-translate-y-full');
+                viewerBottomBar.classList.add('translate-y-full');
+                settingsPopover.classList.add('hidden');
+                thumbnailDrawer.classList.add('hidden');
+            }
+        }
+
+        function syncDirectionUI() {
+            const label = document.getElementById('directionLabel');
+            const leftZoneText = document.getElementById('leftZoneText');
+            const rightZoneText = document.getElementById('rightZoneText');
+
+            if (viewerState.direction === 'rtl') {
+                label.textContent = '우→좌 (일본만화)';
+                pageSlider.style.direction = 'rtl';
+                leftZoneText.textContent = '다음 페이지 (우→좌)';
+                rightZoneText.textContent = '이전 페이지 (우→좌)';
+            } else {
+                label.textContent = '좌→우 (일반)';
+                pageSlider.style.direction = 'ltr';
+                leftZoneText.textContent = '이전 페이지';
+                rightZoneText.textContent = '다음 페이지';
+            }
+        }
+
+        function syncViewModeUI() {
+            const label = document.getElementById('viewModeLabel');
+            const map = { single: '단면', double: '양면', webtoon: '웹툰' };
+            label.textContent = map[viewerState.viewMode];
+
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                if (btn.dataset.mode === viewerState.viewMode) {
+                    btn.className = 'mode-btn py-2 px-2 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-300 font-semibold';
+                } else {
+                    btn.className = 'mode-btn py-2 px-2 rounded-xl border border-gray-700 bg-gray-800/70 text-gray-300 hover:bg-gray-800';
+                }
+            });
+
+            if (viewerState.viewMode === 'webtoon') {
+                pagedStage.classList.add('hidden');
+                webtoonStage.classList.remove('hidden');
+                webtoonStage.classList.add('flex');
+            } else {
+                webtoonStage.classList.add('hidden');
+                webtoonStage.classList.remove('flex');
+                pagedStage.classList.remove('hidden');
+            }
+        }
+
+        function buildThumbnailDrawer() {
+            thumbnailDrawer.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < viewerState.totalPages; i++) {
+                const btn = document.createElement('button');
+                btn.dataset.page = i;
+                btn.className = 'thumb-item shrink-0 px-3 py-2 rounded-xl bg-gray-800/80 hover:bg-indigo-600/40 border border-gray-700 text-xs font-mono text-gray-300 transition flex flex-col items-center gap-1';
+                const shortName = zipEngine.entries[i]?.shortName || `${i + 1}`;
+                btn.innerHTML = `
+                    <span class="font-bold text-white">${i + 1}P</span>
+                    <span class="text-[10px] text-gray-400 max-w-[68px] truncate">${shortName}</span>
+                `;
+                btn.addEventListener('click', () => {
+                    viewerState.currentIndex = i;
+                    if (viewerState.viewMode === 'webtoon') {
+                        const slot = webtoonStage.querySelector(`[data-index="${i}"]`);
+                        if (slot) slot.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                        renderCurrentPage();
+                    }
+                });
+                fragment.appendChild(btn);
+            }
+            thumbnailDrawer.appendChild(fragment);
+        }
+
+        function highlightActiveThumbnail(index) {
+            thumbnailDrawer.querySelectorAll('.thumb-item').forEach(btn => {
+                if (Number(btn.dataset.page) === index) {
+                    btn.classList.add('border-indigo-500', 'bg-indigo-600/30');
+                } else {
+                    btn.classList.remove('border-indigo-500', 'bg-indigo-600/30');
+                }
+            });
+        }
+
+        function closeViewer() {
+            zipEngine.cleanupAllUrls();
+            viewerView.classList.add('hidden');
+            viewerView.classList.remove('flex');
+            libraryView.classList.remove('hidden');
+            settingsPopover.classList.add('hidden');
+            renderRecentBooksList();
+        }
+
+        function applyZoomTransform() {
+            zoomWrapper.style.transform = `scale(${viewerState.zoomScale})`;
+        }
+
+        /**
+         * ============================================================================
+         * 5. SAMPLE COMIC BOOK (.ZIP) GENERATOR FOR INSTANT DEMO
+         * ============================================================================
+         * Generates a 6-page comic book inside a real .zip Blob with deliberately
+         * unsorted filenames (1.png, 2.png, 10.png) to prove Natural Sort and ZIP loading.
+         */
+        async function createAndOpenSampleComicZip() {
+            showToast('샘플 만화책 ZIP 압축파일을 생성하고 있습니다...');
+            const sampleZip = new JSZip();
+
+            const samplePages = [
+                { file: '1_표지.png', title: 'ComiZip 만화 뷰어 가이드북', sub: '제1화: 대용량 ZIP 스트리밍의 비밀', bg: '#312e81', accent: '#818cf8', panelText: ['좌/우 화면 터치 또는 스와이프로 페이지를 넘겨보세요!', '상단 바에서 [우→좌 (일본만화)] 모드로 바꿀 수 있습니다.'] },
+                { file: '2_페이지.png', title: '자연 정렬 (Natural Sort) 검증', sub: '파일명: 2_페이지.png', bg: '#1e293b', accent: '#38bdf8', panelText: ['일반 뷰어는 1.jpg 다음 10.jpg를 먼저 보여줍니다.', 'ComiZip은 숫자 크기를 인식해 1 → 2 → 10 순서로 정확히 정렬합니다!'] },
+                { file: '3_페이지.png', title: '양면 보기 & 웹툰 스크롤 모드', sub: '파일명: 3_페이지.png', bg: '#064e3b', accent: '#34d399', panelText: ['태블릿이나 가로 화면에서는 상단의 [단면] 버튼을 눌러', '[양면 보기] 또는 [웹툰 스크롤]로 즉시 전환해 보세요!'] },
+                { file: '9_페이지.png', title: '메모리 자동 관리 (OOM 방지)', sub: '파일명: 9_페이지.png', bg: '#4c1d95', accent: '#c084fc', panelText: ['수백 MB의 만화책 ZIP도 한 번에 풀지 않습니다.', '현재 페이지 앞뒤만 ObjectURL로 생성하고 지나간 페이지는 즉시 메모리에서 해제합니다.'] },
+                { file: '10_마지막페이지.png', title: '자연 정렬 확인 (10번 파일)', sub: '파일명: 10_마지막페이지.png (2번 뒤가 아닌 마지막에 위치!)', bg: '#7c2d12', accent: '#fb923c', panelText: ['파일명이 10_마지막페이지.png 이지만 2번 앞이 아닌 맨 끝에 정렬되었습니다!', '이제 서재로 돌아가 내 기기의 실제 .zip / .cbz 만화책을 열어보세요.'] }
+            ];
+
+            for (let i = 0; i < samplePages.length; i++) {
+                const p = samplePages[i];
+                const canvas = document.createElement('canvas');
+                canvas.width = 900;
+                canvas.height = 1280;
+                const ctx = canvas.getContext('2d');
+
+                // Background
+                ctx.fillStyle = p.bg;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Manga Page Border
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 8;
+                ctx.strokeRect(45, 45, canvas.width - 90, canvas.height - 90);
+
+                // Header Panel
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(80, 85, canvas.width - 160, 190);
+                ctx.strokeStyle = p.accent;
+                ctx.lineWidth = 4;
+                ctx.strokeRect(80, 85, canvas.width - 160, 190);
+
+                ctx.fillStyle = p.accent;
+                ctx.font = 'bold 28px sans-serif';
+                ctx.fillText(`SAMPLE COMIC • PAGE 0${i + 1}`, 115, 140);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 42px sans-serif';
+                ctx.fillText(p.title, 115, 200);
+
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '24px monospace';
+                ctx.fillText(p.sub, 115, 245);
+
+                // Manga Story Cut 1
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(80, 320, canvas.width - 160, 380);
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 32px sans-serif';
+                ctx.fillText(p.panelText[0], 115, 510);
+
+                // Manga Story Cut 2
+                ctx.fillStyle = '#1e1b4b';
+                ctx.fillRect(80, 740, canvas.width - 160, 380);
+                ctx.strokeStyle = '#ffffff';
+                ctx.strokeRect(80, 740, canvas.width - 160, 380);
+                ctx.fillStyle = '#e0e7ff';
+                ctx.font = 'bold 30px sans-serif';
+                ctx.fillText(p.panelText[1], 115, 930);
+
+                // Page Number Footer
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 30px monospace';
+                ctx.fillText(`- ${i + 1} / ${samplePages.length} -`, canvas.width / 2 - 60, 1190);
+
+                const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+                sampleZip.file(p.file, blob);
+            }
+
+            const zipBlob = await sampleZip.generateAsync({ type: 'blob' });
+            const sampleFile = new File([zipBlob], 'ComiZip_가이드만화_샘플.zip', { type: 'application/zip' });
+            await openComicZipFile(sampleFile);
+        }
+
+        /**
+         * ============================================================================
+         * 6. RECENT BOOKS DASHBOARD RENDERER
+         * ============================================================================
+         */
+        async function renderRecentBooksList() {
+            const list = await storageService.getAllRecentBooks();
+            const grid = document.getElementById('recentBooksGrid');
+            const emptyState = document.getElementById('emptyHistoryState');
+            const badge = document.getElementById('recentCountBadge');
+            const btnClear = document.getElementById('btnClearHistory');
+
+            badge.textContent = list.length;
+            grid.innerHTML = '';
+
+            if (list.length === 0) {
+                emptyState.classList.remove('hidden');
+                btnClear.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            btnClear.classList.remove('hidden');
+
+            list.forEach(item => {
+                const percent = Math.round(((item.lastPage + 1) / item.totalPages) * 100);
+                const sizeMB = (item.fileSize / (1024 * 1024)).toFixed(1);
+                const card = document.createElement('div');
+                card.className = 'p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-indigo-500/60 flex gap-3.5 items-center transition group cursor-pointer';
+                card.innerHTML = `
+                    <div class="w-16 h-22 rounded-xl bg-gray-800 overflow-hidden shrink-0 border border-gray-700 flex items-center justify-center">
+                        ${item.coverDataUrl
+                            ? `<img src="${item.coverDataUrl}" class="w-full h-full object-cover" alt="표지" />`
+                            : `<i data-lucide="book" class="w-6 h-6 text-gray-500"></i>`
+                        }
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold text-white truncate group-hover:text-indigo-300 transition">${item.title}</div>
+                        <div class="text-xs text-gray-400 mt-0.5">${sizeMB} MB • 총 ${item.totalPages}페이지</div>
+                        <div class="mt-2.5 flex items-center justify-between text-xs">
+                            <span class="text-indigo-400 font-semibold">${item.lastPage + 1}P 읽는 중 (${percent}%)</span>
+                            <span class="text-[11px] text-gray-500">${item.direction === 'rtl' ? '우→좌' : '좌→우'}</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden mt-1">
+                            <div class="h-full bg-indigo-500 rounded-full" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                `;
+                card.addEventListener('click', () => {
+                    if (item.title === 'ComiZip_가이드만화_샘플.zip') {
+                        createAndOpenSampleComicZip();
+                    } else {
+                        showToast(`보안 정책상 '${item.title}' 파일을 한 번 선택해주시면 ${item.lastPage + 1}페이지부터 즉시 이어봅니다.`);
+                        document.getElementById('fileInput').click();
+                    }
+                });
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        /**
+         * ============================================================================
+         * 7. EVENT LISTENERS (Touch, Swipe, Double-Tap Zoom, Keyboard, Controls)
+         * ============================================================================
+         */
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+
+        document.getElementById('btnPickFile').addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        document.getElementById('btnLoadSample').addEventListener('click', (e) => {
+            e.stopPropagation();
+            createAndOpenSampleComicZip();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) openComicZipFile(file);
+            fileInput.value = '';
+        });
+
+        // Drag & Drop support
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-indigo-500', 'bg-indigo-950/20');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+            const file = e.dataTransfer.files[0];
+            if (file) openComicZipFile(file);
+        });
+
+        // Viewer Top & Bottom Controls
+        document.getElementById('btnBackToLibrary').addEventListener('click', closeViewer);
+
+        document.getElementById('btnToggleDirection').addEventListener('click', () => {
+            viewerState.direction = viewerState.direction === 'ltr' ? 'rtl' : 'ltr';
+            syncDirectionUI();
+            if (viewerState.viewMode !== 'webtoon') renderCurrentPage();
+            showToast(viewerState.direction === 'rtl' ? '일본 만화 모드 (우→좌 넘김)' : '일반 만화 모드 (좌→우 넘김)');
+        });
+
+        document.getElementById('btnCycleViewMode').addEventListener('click', async () => {
+            const order = ['single', 'double', 'webtoon'];
+            const nextIdx = (order.indexOf(viewerState.viewMode) + 1) % order.length;
+            viewerState.viewMode = order[nextIdx];
+            syncViewModeUI();
+            if (viewerState.viewMode === 'webtoon') {
+                await renderWebtoonMode();
+                showToast('웹툰 세로 스크롤 모드');
+            } else {
+                await renderCurrentPage();
+                showToast(viewerState.viewMode === 'double' ? '양면(2페이지) 보기 모드' : '단면(1페이지) 보기 모드');
+            }
+        });
+
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                viewerState.viewMode = btn.dataset.mode;
+                syncViewModeUI();
+                if (viewerState.viewMode === 'webtoon') {
+                    await renderWebtoonMode();
+                } else {
+                    await renderCurrentPage();
+                }
+            });
+        });
+
+        document.querySelectorAll('.fit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                viewerState.fitMode = btn.dataset.fit;
+                document.querySelectorAll('.fit-btn').forEach(b => {
+                    b.className = b.dataset.fit === viewerState.fitMode
+                        ? 'fit-btn py-2 px-2 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-300 font-semibold'
+                        : 'fit-btn py-2 px-2 rounded-xl border border-gray-700 bg-gray-800/70 text-gray-300 hover:bg-gray-800';
+                });
+                applyImageFitClasses();
+            });
+        });
+
+        document.getElementById('chkCoverSingle').addEventListener('change', (e) => {
+            viewerState.coverSingle = e.target.checked;
+            if (viewerState.viewMode === 'double') renderCurrentPage();
+        });
+
+        // Brightness & Eye Protection Sliders
+        function updateScreenFilter() {
+            const overlay = document.getElementById('screenFilterOverlay');
+            const darkness = (100 - viewerState.brightness) / 100;
+            const sepiaAlpha = viewerState.sepia / 200;
+            overlay.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
+            overlay.style.boxShadow = viewerState.sepia > 0
+                ? `inset 0 0 0 9999px rgba(251, 191, 36, ${sepiaAlpha})`
+                : 'none';
+        }
+
+        document.getElementById('brightnessSlider').addEventListener('input', (e) => {
+            viewerState.brightness = Number(e.target.value);
+            document.getElementById('brightnessVal').textContent = `${viewerState.brightness}%`;
+            updateScreenFilter();
+        });
+
+        document.getElementById('sepiaSlider').addEventListener('input', (e) => {
+            viewerState.sepia = Number(e.target.value);
+            document.getElementById('sepiaVal').textContent = `${viewerState.sepia}%`;
+            updateScreenFilter();
+        });
+
+        document.getElementById('btnShowTouchGuide').addEventListener('click', () => {
+            const guide = document.getElementById('touchGuideOverlay');
+            guide.classList.remove('opacity-0');
+            setTimeout(() => guide.classList.add('opacity-0'), 1800);
+        });
+
+        document.getElementById('btnToggleSettings').addEventListener('click', () => {
+            settingsPopover.classList.toggle('hidden');
+        });
+        document.getElementById('btnCloseSettings').addEventListener('click', () => {
+            settingsPopover.classList.add('hidden');
+        });
+
+        document.getElementById('btnToggleThumbnails').addEventListener('click', () => {
+            thumbnailDrawer.classList.toggle('hidden');
+            thumbnailDrawer.classList.toggle('flex');
+        });
+
+        document.getElementById('btnFullscreen').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        });
+
+        // Page Seek Slider
+        pageSlider.addEventListener('input', (e) => {
+            const targetPage = Number(e.target.value);
+            viewerState.currentIndex = targetPage;
+            if (viewerState.viewMode === 'webtoon') {
+                const slot = webtoonStage.querySelector(`[data-index="${targetPage}"]`);
+                if (slot) slot.scrollIntoView();
+            } else {
+                renderCurrentPage();
+            }
+        });
+
+        // Stage Touch / Click / Swipe / Double-Tap Zoom Gestures
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let lastTapTime = 0;
+
+        pagedStage.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }
+        }, { passive: true });
+
+        pagedStage.addEventListener('touchend', (e) => {
+            if (e.changedTouches.length !== 1) return;
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+
+            // Horizontal Swipe Detection
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+                if (dx < 0) {
+                    // Swipe Left
+                    viewerState.direction === 'rtl' ? stepBackward() : stepForward();
+                } else {
+                    // Swipe Right
+                    viewerState.direction === 'rtl' ? stepForward() : stepBackward();
+                }
+            }
+        }, { passive: true });
+
+        // Click on Left / Center / Right 3-column zones & Double-Tap Zoom
+        pagedStage.addEventListener('click', (e) => {
+            const now = Date.now();
+            const rect = pagedStage.getBoundingClientRect();
+            const relX = (e.clientX - rect.left) / rect.width;
+
+            // Center zone double-click/tap toggles 2x Zoom
+            if (relX >= 0.33 && relX <= 0.67 && (now - lastTapTime) < 280) {
+                viewerState.zoomScale = viewerState.zoomScale === 1 ? 2 : 1;
+                applyZoomTransform();
+                lastTapTime = 0;
+                return;
+            }
+            lastTapTime = now;
+
+            if (relX < 0.33) {
+                handleLeftSideTap();
+            } else if (relX > 0.67) {
+                handleRightSideTap();
+            } else {
+                toggleHud();
+            }
+        });
+
+        // In Webtoon mode, tapping center toggles HUD
+        webtoonStage.addEventListener('click', () => {
+            toggleHud();
+        });
+
+        // Keyboard Arrow & Space Navigation
+        window.addEventListener('keydown', (e) => {
+            if (viewerView.classList.contains('hidden')) return;
+            if (e.key === 'ArrowLeft') {
+                handleLeftSideTap();
+            } else if (e.key === 'ArrowRight') {
+                handleRightSideTap();
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                stepForward();
+            } else if (e.key === 'Escape') {
+                closeViewer();
+            }
+        });
+
+        // Clear History
+        document.getElementById('btnClearHistory').addEventListener('click', async () => {
+            await storageService.clearAll();
+            renderRecentBooksList();
+            showToast('최근 읽은 기록을 모두 비웠습니다.');
+        });
+
+        // Android APK Guide Modal
+        const androidModal = document.getElementById('androidGuideModal');
+        document.getElementById('btnAndroidGuide').addEventListener('click', () => {
+            androidModal.classList.remove('hidden');
+            androidModal.classList.add('flex');
+        });
+        document.getElementById('btnCloseAndroidModal').addEventListener('click', () => {
+            androidModal.classList.add('hidden');
+            androidModal.classList.remove('flex');
+        });
+        document.getElementById('btnConfirmAndroidModal').addEventListener('click', () => {
+            androidModal.classList.add('hidden');
+            androidModal.classList.remove('flex');
+        });
+
+        // Initialize Recent History on Startup
+        window.addEventListener('DOMContentLoaded', () => {
+            renderRecentBooksList();
+        });
+    </script>
+</body>
+</html>
+```
