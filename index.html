@@ -79,6 +79,10 @@
         .viewer-image {
             transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
         }
+        /* 흑백 반전 (야간 OLED 독서용 색상 반전 필터) */
+        .manga-inverted {
+            filter: invert(1);
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
@@ -98,14 +102,6 @@
                     </div>
                     <p class="text-xs text-gray-400">대용량 ZIP · CBZ 스트리밍 만화 뷰어</p>
                 </div>
-            </div>
-
-            <div class="flex items-center gap-2">
-                <button id="btnAndroidGuide" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-800/90 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition">
-                    <i data-lucide="smartphone" class="w-4 h-4 text-emerald-400"></i>
-                    <span class="hidden sm:inline">안드로이드 APK 변환 가이드</span>
-                    <span class="sm:hidden">APK 가이드</span>
-                </button>
             </div>
         </header>
 
@@ -241,6 +237,12 @@
                         <span id="viewModeLabel">단면</span>
                     </button>
 
+                    <!-- Invert Colors Quick Toggle -->
+                    <button id="btnToggleInvert" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-xs font-semibold text-white border border-gray-700/70 transition" title="흑백 반전 (야간 모드)">
+                        <i data-lucide="contrast" class="w-4 h-4 text-cyan-400"></i>
+                        <span class="hidden sm:inline">반전</span>
+                    </button>
+
                     <!-- Settings Drawer Button -->
                     <button id="btnToggleSettings" class="p-2.5 rounded-xl bg-gray-900/80 hover:bg-gray-800 text-white border border-gray-700/70 transition" title="뷰어 상세 설정">
                         <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
@@ -334,6 +336,15 @@
                     <input type="checkbox" id="chkCoverSingle" checked class="w-4 h-4 accent-indigo-500 rounded cursor-pointer" />
                 </div>
 
+                <!-- Black & White Invert Toggle -->
+                <div class="flex items-center justify-between pt-1">
+                    <div>
+                        <div class="text-gray-200 font-medium">흑백 반전 (야간 모드)</div>
+                        <div class="text-[11px] text-gray-400">흰 배경을 검은색으로 반전해 눈부심 방지</div>
+                    </div>
+                    <input type="checkbox" id="chkInvertColors" class="w-4 h-4 accent-indigo-500 rounded cursor-pointer" />
+                </div>
+
                 <!-- Brightness Control -->
                 <div>
                     <div class="flex justify-between text-gray-300 mb-1">
@@ -389,65 +400,7 @@
         </footer>
     </div>
 
-    <!-- ==================== 3. ANDROID CAPACITOR GUIDE MODAL ==================== -->
-    <div id="androidGuideModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-700 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-            <div class="p-5 border-b border-gray-800 flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                    <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-                        <i data-lucide="smartphone" class="w-5 h-5"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-base font-bold text-white">이 웹앱을 안드로이드 APK로 빌드하는 방법</h3>
-                        <p class="text-xs text-gray-400">Capacitor를 이용해 스토어 출시 및 파일 탐색기 ZIP 연결하기</p>
-                    </div>
-                </div>
-                <button id="btnCloseAndroidModal" class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
-
-            <div class="p-5 overflow-y-auto space-y-4 text-xs sm:text-sm text-gray-300 leading-relaxed">
-                <div class="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-xs">
-                    현재 보고 계신 웹앱은 모바일 터치 제스처, 메모리 해제, IndexedDB가 모두 구현되어 있어 <strong>Capacitor</strong>로 감싸기만 하면 즉시 네이티브 안드로이드 앱(APK)으로 동작합니다.
-                </div>
-
-                <div>
-                    <h4 class="font-bold text-white mb-1">1단계: Capacitor 초기화 및 안드로이드 플랫폼 추가</h4>
-                    <pre class="p-3 rounded-xl bg-black/80 border border-gray-800 text-emerald-400 font-mono text-xs overflow-x-auto select-all">npm init -y
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init ComiZip com.example.comizip --web-dir .
-npx cap add android</pre>
-                </div>
-
-                <div>
-                    <h4 class="font-bold text-white mb-1">2단계: 안드로이드 '내 파일'에서 .zip / .cbz 바로 열기 (Intent Filter)</h4>
-                    <p class="text-xs text-gray-400 mb-2"><code>android/app/src/main/AndroidManifest.xml</code>의 <code>&lt;activity&gt;</code> 태그 내부에 아래 설정을 추가하면, 스마트폰 파일 관리자에서 만화 ZIP을 터치했을 때 이 앱이 연결 프로그램으로 뜹니다.</p>
-                    <pre class="p-3 rounded-xl bg-black/80 border border-gray-800 text-amber-300 font-mono text-xs overflow-x-auto select-all">&lt;intent-filter&gt;
-    &lt;action android:name="android.intent.action.VIEW" /&gt;
-    &lt;category android:name="android.intent.category.DEFAULT" /&gt;
-    &lt;category android:name="android.intent.category.BROWSABLE" /&gt;
-    &lt;data android:scheme="content" /&gt;
-    &lt;data android:scheme="file" /&gt;
-    &lt;data android:mimeType="application/zip" /&gt;
-    &lt;data android:mimeType="application/x-cbz" /&gt;
-&lt;/intent-filter&gt;</pre>
-                </div>
-
-                <div>
-                    <h4 class="font-bold text-white mb-1">3단계: Android Studio에서 APK 추출</h4>
-                    <pre class="p-3 rounded-xl bg-black/80 border border-gray-800 text-indigo-300 font-mono text-xs overflow-x-auto select-all">npx cap copy
-npx cap open android</pre>
-                </div>
-            </div>
-
-            <div class="p-4 border-t border-gray-800 bg-gray-900/50 flex justify-end">
-                <button id="btnConfirmAndroidModal" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">확인</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ==================== 4. TOAST NOTIFICATION ==================== -->
+    <!-- ==================== 3. TOAST NOTIFICATION ==================== -->
     <div id="toastContainer" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2"></div>
 
     <!-- ==================== APPLICATION LOGIC ==================== -->
@@ -725,6 +678,7 @@ npx cap open android</pre>
             viewMode: 'single',   // 'single' | 'double' | 'webtoon'
             fitMode: 'contain',   // 'contain' | 'width' | 'height'
             coverSingle: true,    // In double mode, show page 0 alone as cover
+            invertColors: false,  // 흑백 반전 활성화 여부
             hudVisible: true,
             zoomScale: 1,
             brightness: 100,
@@ -1369,6 +1323,35 @@ npx cap open android</pre>
             if (viewerState.viewMode === 'double') renderCurrentPage();
         });
 
+        // Black & White Color Inversion Toggle
+        function setInvertColors(enabled) {
+            viewerState.invertColors = enabled;
+            const btnInvert = document.getElementById('btnToggleInvert');
+            const chkInvert = document.getElementById('chkInvertColors');
+
+            if (enabled) {
+                zoomWrapper.classList.add('manga-inverted');
+                webtoonStage.classList.add('manga-inverted');
+                btnInvert.classList.add('border-cyan-500', 'bg-cyan-500/20', 'text-cyan-300');
+            } else {
+                zoomWrapper.classList.remove('manga-inverted');
+                webtoonStage.classList.remove('manga-inverted');
+                btnInvert.classList.remove('border-cyan-500', 'bg-cyan-500/20', 'text-cyan-300');
+            }
+            if (chkInvert) chkInvert.checked = enabled;
+        }
+
+        document.getElementById('btnToggleInvert').addEventListener('click', () => {
+            const next = !viewerState.invertColors;
+            setInvertColors(next);
+            showToast(next ? '흑백 반전 모드가 켜졌습니다.' : '흑백 반전 모드가 꺼졌습니다.');
+        });
+
+        document.getElementById('chkInvertColors').addEventListener('change', (e) => {
+            setInvertColors(e.target.checked);
+            showToast(e.target.checked ? '흑백 반전 모드가 켜졌습니다.' : '흑백 반전 모드가 꺼졌습니다.');
+        });
+
         // Brightness & Eye Protection Sliders
         function updateScreenFilter() {
             const overlay = document.getElementById('screenFilterOverlay');
@@ -1508,21 +1491,6 @@ npx cap open android</pre>
             await storageService.clearAll();
             renderRecentBooksList();
             showToast('최근 읽은 기록을 모두 비웠습니다.');
-        });
-
-        // Android APK Guide Modal
-        const androidModal = document.getElementById('androidGuideModal');
-        document.getElementById('btnAndroidGuide').addEventListener('click', () => {
-            androidModal.classList.remove('hidden');
-            androidModal.classList.add('flex');
-        });
-        document.getElementById('btnCloseAndroidModal').addEventListener('click', () => {
-            androidModal.classList.add('hidden');
-            androidModal.classList.remove('flex');
-        });
-        document.getElementById('btnConfirmAndroidModal').addEventListener('click', () => {
-            androidModal.classList.add('hidden');
-            androidModal.classList.remove('flex');
         });
 
         // Initialize Recent History on Startup
